@@ -1,0 +1,181 @@
+import { useEffect, useState, useCallback } from 'react'
+import { auditAPI } from '../utils/api'
+import { Download, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react'
+
+const EVENT_TYPES = ['all', 'inference_evaluated', 'policy_violated', 'model_blocked', 'model_registered', 'policy_created']
+const PAGE_SIZE = 15
+
+const MOCK_LOGS = Array.from({ length: 80 }, (_, i) => {
+  const MODELS = ['credit-scoring-v3', 'hiring-screener-v2', 'content-moderation-llm', 'loan-approval-ml']
+  const EVENTS = ['inference_evaluated', 'policy_violated', 'model_blocked', 'model_registered', 'policy_created']
+  return {
+    id: `log-${i}`, event_type: EVENTS[i % 5], entity_id: MODELS[i % 4],
+    actor: ['governance-engine', 'admin@kavachx.ai', 'ml-engineer@kavachx.ai'][i % 3],
+    action: ['evaluate', 'block', 'alert', 'register'][i % 4],
+    risk_level: ['high', 'medium', 'low'][i % 3],
+    timestamp: new Date(Date.now() - i * 900000).toISOString(),
+  }
+})
+
+function Pagination({ page, total, pageSize, onChange }) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  if (totalPages <= 1) return null
+  const pages = []
+  const start = Math.max(1, page - 2)
+  const end = Math.min(totalPages, page + 2)
+  for (let i = start; i <= end; i++) pages.push(i)
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0 2px', borderTop: '1px solid var(--border)' }}>
+      <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+        Showing {Math.min((page - 1) * pageSize + 1, total)}–{Math.min(page * pageSize, total)} of {total}
+      </span>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <button className="btn btn-secondary btn-xs" onClick={() => onChange(page - 1)} disabled={page === 1}>
+          <ChevronLeft size={13} />
+        </button>
+        {start > 1 && <><button className="btn btn-secondary btn-xs" onClick={() => onChange(1)}>1</button><span style={{ color: 'var(--text-muted)', fontSize: 11 }}>…</span></>}
+        {pages.map(p => (
+          <button key={p} className={`btn btn-xs ${p === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onChange(p)}>{p}</button>
+        ))}
+        {end < totalPages && <><span style={{ color: 'var(--text-muted)', fontSize: 11 }}>…</span><button className="btn btn-secondary btn-xs" onClick={() => onChange(totalPages)}>{totalPages}</button></>}
+        <button className="btn btn-secondary btn-xs" onClick={() => onChange(page + 1)} disabled={page === totalPages}>
+          <ChevronRight size={13} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function AuditPage() {
+  const [logs, setLogs] = useState(MOCK_LOGS)
+  const [loading, setLoading] = useState(false)
+  const [filter, setFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const firstLoad = { current: true }
+
+  const load = useCallback(async (showSpinner = false) => {
+    if (showSpinner) setLoading(true)
+    try {
+      const params = { limit: 200 }
+      if (filter !== 'all') params.event_type = filter
+      const r = await auditAPI.getLogs(params)
+      setLogs(Array.isArray(r.data) && r.data.length > 0 ? r.data : MOCK_LOGS)
+    } catch { setLogs(MOCK_LOGS) }
+    finally { if (showSpinner) setLoading(false) }
+  }, [filter])
+
+  // Initial mount: silent background refresh (table already shows mock data)
+  useEffect(() => { load(false) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Filter changes: show spinner since we're swapping visible data
+  useEffect(() => { load(true); setPage(1) }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refresh when simulation creates new events
+  useEffect(() => {
+    const handler = () => { load(false) }
+    window.addEventListener('kavachx:simulation-complete', handler)
+    return () => window.removeEventListener('kavachx:simulation-complete', handler)
+  }, [load])
+
+  // Reset page on search change
+  useEffect(() => { setPage(1) }, [search])
+
+  const filtered = search
+    ? logs.filter(l =>
+      l.event_type?.toLowerCase().includes(search.toLowerCase()) ||
+      l.actor?.toLowerCase().includes(search.toLowerCase()) ||
+      l.entity_id?.toLowerCase().includes(search.toLowerCase())
+    )
+    : logs
+
+  const totalFiltered = filtered.length
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const riskBadge = (r) => ({ high: 'badge-block', medium: 'badge-alert', low: 'badge-pass' }[r] || 'badge-muted')
+
+  const exportCSV = () => {
+    const rows = [['Timestamp', 'Event Type', 'Entity ID', 'Actor', 'Action', 'Risk'].join(',')]
+    filtered.forEach(l => rows.push([
+      new Date(l.timestamp).toISOString(), l.event_type, l.entity_id || '', l.actor || '', l.action || '', l.risk_level || ''
+    ].join(',')))
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `kavachx-audit-${Date.now()}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div>
+      <div className="page-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div className="page-eyebrow">Governance</div>
+            <h1 className="page-title">Audit Logs</h1>
+            <p className="page-desc">Immutable record of all governance events, policy violations, and model actions</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={load}><RefreshCw size={13} /> Refresh</button>
+            <button className="btn btn-secondary btn-sm" onClick={exportCSV}><Download size={13} /> Export CSV</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+          <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          <input className="form-input" style={{ paddingLeft: 32 }} placeholder="Search logs…"
+            value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="filter-pills">
+          {EVENT_TYPES.map(t => (
+            <button key={t} className={`filter-pill ${filter === t ? 'active' : ''}`} onClick={() => setFilter(t)}>
+              {t === 'all' ? 'All' : t.replace(/_/g, ' ')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">Audit Trail</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{totalFiltered} events</span>
+        </div>
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><div className="spinner" /></div>
+        ) : filtered.length === 0 ? (
+          <div className="empty">
+            <div className="empty-title">No audit events</div>
+            <div className="empty-desc">Run inferences or create policies to generate audit events.</div>
+          </div>
+        ) : (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Timestamp</th><th>Event Type</th><th>Entity</th><th>Actor</th><th>Action</th><th>Risk</th><th>Details</th></tr>
+                </thead>
+                <tbody>
+                  {paginated.map(l => (
+                    <tr key={l.id}>
+                      <td className="font-mono" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(l.timestamp).toLocaleString()}</td>
+                      <td><span className="badge badge-info">{l.event_type?.replace(/_/g, ' ')}</span></td>
+                      <td className="font-mono" style={{ fontSize: 11 }}>{l.entity_id?.slice(-12) || '—'}</td>
+                      <td style={{ fontSize: 12 }}>{l.actor || '—'}</td>
+                      <td style={{ fontSize: 12, color: 'var(--text-dim)' }}>{l.action || '—'}</td>
+                      <td>{l.risk_level ? <span className={`badge ${riskBadge(l.risk_level)}`}>{l.risk_level}</span> : '—'}</td>
+                      <td style={{ fontSize: 11, color: 'var(--text-muted)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {l.details ? JSON.stringify(l.details).slice(0, 60) + '…' : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination page={page} total={totalFiltered} pageSize={PAGE_SIZE} onChange={setPage} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
