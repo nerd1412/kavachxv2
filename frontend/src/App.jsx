@@ -16,7 +16,8 @@ import LineagePage from './pages/LineagePage'
 import AdversarialPage from './pages/AdversarialPage'
 import AlertsPage from './pages/AlertsPage'
 import SettingsPage from './pages/SettingsPage'
-import { Lock } from 'lucide-react'
+import PlaygroundPage from './pages/PlaygroundPage'
+import { Lock, Zap } from 'lucide-react'
 
 /* ── Auth guard ── */
 function RequireAuth({ children }) {
@@ -98,6 +99,7 @@ function AppLayout() {
             <Route path="/lineage"     element={<RoleGuard roles={ENGINEERING_ROLES}><LineagePage /></RoleGuard>} />
             <Route path="/adversarial" element={<RoleGuard roles={ENGINEERING_ROLES}><AdversarialPage /></RoleGuard>} />
             <Route path="/alerts"      element={<RoleGuard roles={[...ENGINEERING_ROLES,...COMPLIANCE_ROLES]}><AlertsPage /></RoleGuard>} />
+            <Route path="/playground"  element={<PlaygroundPage />} />
             <Route path="/settings"    element={<RoleGuard roles={['super_admin', 'ml_engineer', 'compliance_officer']}><SettingsPage /></RoleGuard>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
