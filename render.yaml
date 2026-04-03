@@ -1,10 +1,9 @@
 services:
   - type: web
     name: kavachx-platform
-    runtime: python
+    runtime: docker # Updated to use Docker for world-class robustness
     plan: free
-    buildCommand: "cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt"
-    startCommand: "cd backend && bash start.sh"
+    # No buildCommand or startCommand needed when using Dockerfile
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -12,16 +11,14 @@ services:
         generateValue: true
       - key: PYTHON_VERSION
         value: 3.11.0
-      # IMPORTANT: Set CORS_ORIGINS to your actual frontend domain(s), never use "*" in production
-      # Example: https://kavachx.yourdomain.com
+      - key: PORT
+        value: 8002
+      # IMPORTANT: Set CORS_ORIGINS to your actual frontend domain(s)
       - key: CORS_ORIGINS
         sync: false
       - key: DATABASE_URL
-        # For production, use a PostgreSQL connection string:
-        # postgresql+asyncpg://user:password@host:5432/kavachx
         sync: false
       - key: BASCG_SIGNING_KEY_SEED_B64
-        # Required: run `python scripts/generate_dev_keys.py` and set the output here
         sync: false
       - key: MOCK_TSA_SECRET
         generateValue: true
