@@ -16,18 +16,23 @@ class SafetyScanner:
         r"fake invoice", r"smurf money", r"unaccounted cash"
     ]
 
-    # 2. Self-Harm & Suicide
     SELF_HARM_PATTERNS = [
-        r"suicide", r"kill myself", r"end my life", r"hang myself",
+        r"suicide", r"sucide", r"kill myself", r"end my life", r"hang myself",
         r"easy way to die", r"painless death", r"cut my wrist",
-        r"overdose", r"wish I was dead", r"commit suicide"
+        r"overdose", r"wish I was dead", r"commit suicide", r"self harm"
     ]
 
-    # 3. Violence & Physical Harm
+    # 3. Violence, Physical Harm & Weapons Manufacturing
     VIOLENCE_PATTERNS = [
         r"make a bomb", r"how to kill", r"assassinate", r"terrorist",
         r"explosive device", r"build a weapon", r"mass shooting",
-        r"poison someone", r"illegal drugs", r"crystal meth", r"heroin"
+        r"poison someone", r"illegal drugs", r"crystal meth", r"heroin",
+        # Weapons manufacturing — hard block
+        r"rdx", r"detonat", r"c4 explosive", r"ied\b", r"pipe bomb",
+        r"molotov", r"landmine", r"build.*gun", r"3d print.*weapon",
+        r"make.*grenade", r"sarin", r"nerve agent", r"bioweapon",
+        r"chemical weapon", r"dirty bomb", r"nuclear device",
+        r"ammonium nitrate.*bomb", r"fertiliser.*bomb",
     ]
 
     # 4. Toxicity & Hate Speech (Insults, etc.)
@@ -51,8 +56,9 @@ class SafetyScanner:
         """
         if not text or not isinstance(text, str):
             return {
-                "toxicity_score": 0.0, 
+                "toxicity_score": 0.0,
                 "injection_score": 0.0,
+                "prompt_injection_score": 0.0,
                 "financial_crime_score": 0.0,
                 "self_harm_score": 0.0,
                 "violence_score": 0.0
@@ -74,6 +80,7 @@ class SafetyScanner:
             "toxicity_score": get_score(self.TOXIC_PATTERNS),
             "injection_score": get_score(self.INJECTION_PATTERNS)
         }
+        results["prompt_injection_score"] = results["injection_score"]
 
         # Legacy/Catch-all toxicity score for existing policies
         results["toxicity_score"] = max(

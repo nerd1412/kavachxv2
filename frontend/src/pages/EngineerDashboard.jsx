@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from 'recharts'
 import { modelsAPI, governanceAPI } from '../utils/api'
+import { useToast } from '../context/ToastContext'
+import { useTranslation } from '../context/LanguageContext'
+import { SkeletonStat, SkeletonCard } from '../components/shared/Skeleton'
 import { Database, Cpu, CheckCircle, AlertCircle } from 'lucide-react'
 
 function cssVar(name) {
@@ -35,7 +38,7 @@ function useChartColors() {
 // Decision → badge class AND color (single source of truth)
 const DECISION_CONFIG = {
   PASS:         { badge: 'badge-pass',   color: 'var(--green)',  label: 'ALLOW' },
-  ALERT:        { badge: 'badge-alert',  color: 'var(--red)',  label: 'ALERT' },
+  ALERT:        { badge: 'badge-alert',  color: 'var(--amber)',  label: 'ALERT' },
   HUMAN_REVIEW: { badge: 'badge-review', color: 'var(--orange)', label: 'REVIEW' },
   BLOCK:        { badge: 'badge-block',  color: 'var(--red)',    label: 'BLOCK' },
 }
@@ -62,6 +65,8 @@ export default function EngineerDashboard() {
   const [inferences, setInferences] = useState([])
   const [loading, setLoading] = useState(true)
   const col = useChartColors()
+  const toast = useToast()
+  const { t } = useTranslation()
 
   useEffect(() => {
     const load = async () => {
@@ -74,6 +79,7 @@ export default function EngineerDashboard() {
         if (inf.data) setInferences(inf.data)
       } catch (err) {
         console.error("Failed to load engineer dashboard data:", err)
+        toast.error("Data Load Failure", "Could not fetch model inventory or recent inferences.")
       } finally {
         setLoading(false)
       }
@@ -126,63 +132,81 @@ export default function EngineerDashboard() {
       </div>
 
       <div className="stats-row">
-        {[
-          { label: 'Registered Models', value: displayModels.length, icon: Database, color: 'var(--accent)', bg: 'var(--accent-light)' },
-          { label: 'Active Models', value: displayModels.filter(m => m.status === 'active').length, icon: CheckCircle, color: 'var(--green)', bg: 'var(--green-light)' },
-          { label: 'Suspended', value: displayModels.filter(m => m.status === 'suspended').length, icon: AlertCircle, color: 'var(--red)', bg: 'var(--red-light)' },
-          { label: 'Inferences (recent)', value: displayInferences.length, icon: Cpu, color: 'var(--purple)', bg: 'var(--purple-light)' },
-        ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="stat-card" style={{ '--stat-color': color, '--stat-bg': bg }}>
-            <div className="stat-icon"><Icon size={18} /></div>
-            <div className="stat-value">{value}</div>
-            <div className="stat-label">{label}</div>
-          </div>
-        ))}
+        {loading ? (
+          <>
+            <SkeletonStat />
+            <SkeletonStat />
+            <SkeletonStat />
+            <SkeletonStat />
+          </>
+        ) : (
+          [
+            { label: 'Registered Models', value: displayModels.length, icon: Database, color: 'var(--accent)', bg: 'var(--accent-light)' },
+            { label: 'Active Models', value: displayModels.filter(m => m.status === 'active').length, icon: CheckCircle, color: 'var(--green)', bg: 'var(--green-light)' },
+            { label: 'Suspended', value: displayModels.filter(m => m.status === 'suspended').length, icon: AlertCircle, color: 'var(--red)', bg: 'var(--red-light)' },
+            { label: 'Inferences (recent)', value: displayInferences.length, icon: Cpu, color: 'var(--purple)', bg: 'var(--purple-light)' },
+          ].map(({ label, value, icon: Icon, color, bg }) => (
+            <div key={label} className="stat-card" style={{ '--stat-color': color, '--stat-bg': bg }}>
+              <div className="stat-icon"><Icon size={18} /></div>
+              <div className="stat-value">{value}</div>
+              <div className="stat-label">{label}</div>
+            </div>
+          ))
+        )}
       </div>
 
       <div className="grid-2 mb-20">
-        {/* ── Risk Score Distribution Bar Chart ── */}
-        <div className="card">
-          <div className="card-header"><span className="card-title">Risk Score Distribution</span></div>
-          {col.accent ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={barData} margin={{ top: 4, right: 8, bottom: 0, left: -10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={col.border} />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Bar dataKey="count" fill={col.accent} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-              Loading…
-            </div>
-          )}
-        </div>
-
-        {/* ── Registered Models ── */}
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Registered Models</span>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{displayModels.length} total</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
-            {displayModels.length === 0 && (
-              <div className="empty"><div className="empty-title">No models registered</div></div>
-            )}
-            {displayModels.map(m => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                <Database size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{m.version} · {m.model_type}</div>
+        {loading ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        ) : (
+          <>
+            {/* ── Risk Score Distribution Bar Chart ── */}
+            <div className="card">
+              <div className="card-header"><span className="card-title">Risk Score Distribution</span></div>
+              {col.accent ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={barData} margin={{ top: 4, right: 8, bottom: 0, left: -10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={col.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                    <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} allowDecimals={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Bar dataKey="count" fill={col.accent} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                  Loading…
                 </div>
-                <span className={`badge ${m.status === 'active' ? 'badge-active' : m.status === 'suspended' ? 'badge-block' : 'badge-muted'}`}>{m.status}</span>
+              )}
+            </div>
+
+            {/* ── Registered Models ── */}
+            <div className="card">
+              <div className="card-header">
+                <span className="card-title">Registered Models</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{displayModels.length} total</span>
               </div>
-            ))}
-          </div>
-        </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
+                {displayModels.length === 0 && (
+                  <div className="empty"><div className="empty-title">No models registered</div></div>
+                )}
+                {displayModels.map(m => (
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+                    <Database size={14} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>{m.version} · {m.model_type}</div>
+                    </div>
+                    <span className={`badge ${m.status === 'active' ? 'badge-active' : m.status === 'suspended' ? 'badge-block' : 'badge-muted'}`}>{m.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Recent Inference Events ── */}

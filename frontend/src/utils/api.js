@@ -1,7 +1,10 @@
 import axios from 'axios'
 
 const isProd = import.meta.env.PROD
-const BASE = import.meta.env.VITE_API_URL || (isProd ? '/api/v1' : 'http://localhost:8005/api/v1')
+// VITE_API_URL overrides everything (set in .env.local for local dev)
+// Production: serve frontend from the same origin as the backend (/api/v1 is a relative path)
+// Local dev default: port 8002 (matches backend PORT in .env)
+const BASE = import.meta.env.VITE_API_URL || (isProd ? '/api/v1' : 'http://localhost:8002/api/v1')
 
 export const api = axios.create({
   baseURL: BASE,
@@ -64,4 +67,12 @@ export const governanceAPI = {
 export const settingsAPI = {
   getThresholds: () => api.get('/settings/thresholds'),
   updateThresholds: d => api.put('/settings/thresholds', d),
+}
+
+export const usersAPI = {
+  list:          (params) => api.get('/users', { params }),
+  create:        (d)      => api.post('/users', d),
+  update:        (id, d)  => api.put(`/users/${id}`, d),
+  resetPassword: (id, d)  => api.post(`/users/${id}/reset-password`, d),
+  deactivate:    (id)     => api.delete(`/users/${id}`),
 }

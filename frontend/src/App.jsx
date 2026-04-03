@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { ToastProvider } from './context/ToastContext'
+import { LanguageProvider } from './context/LanguageContext'
 import Sidebar from './components/shared/Sidebar'
 import Topbar from './components/shared/Topbar'
+import CommandPalette from './components/shared/CommandPalette'
+import ErrorBoundary from './components/shared/ErrorBoundary'
 import LoginPage from './pages/LoginPage'
 import ExecutiveDashboard from './pages/ExecutiveDashboard'
 import EngineerDashboard from './pages/EngineerDashboard'
@@ -17,7 +21,9 @@ import AdversarialPage from './pages/AdversarialPage'
 import AlertsPage from './pages/AlertsPage'
 import SettingsPage from './pages/SettingsPage'
 import PlaygroundPage from './pages/PlaygroundPage'
-import { Lock, Zap } from 'lucide-react'
+import SyntheticMediaPage from './pages/SyntheticMediaPage'
+import UsersPage from './pages/UsersPage'
+import { Lock } from 'lucide-react'
 
 /* ── Auth guard ── */
 function RequireAuth({ children }) {
@@ -64,13 +70,42 @@ const EXECUTIVE_ROLES   = ['super_admin','executive']
 /* ── App layout shell ── */
 function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [cmdOpen, setCmdOpen] = useState(false)
   const location = useLocation()
 
   // Close sidebar on any navigation
   useEffect(() => { setMobileOpen(false) }, [location.pathname])
 
+  // ── Cmd+K / Ctrl+K global shortcut ──
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCmdOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // ── Cursor-follow glow on .card elements (dark mode only) ──
+  useEffect(() => {
+    const handleMove = (e) => {
+      const card = e.target.closest('.card')
+      if (!card) return
+      const r = card.getBoundingClientRect()
+      card.style.setProperty('--gx', `${e.clientX - r.left}px`)
+      card.style.setProperty('--gy', `${e.clientY - r.top}px`)
+    }
+    document.addEventListener('mousemove', handleMove, { passive: true })
+    return () => document.removeEventListener('mousemove', handleMove)
+  }, [])
+
   return (
     <div className="app-layout">
+      {/* Ambient risk aura — CSS controls visibility via html[data-risk] */}
+      <div className="risk-aura" aria-hidden="true" />
+
       <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
 
       <main className="app-main">
@@ -78,6 +113,7 @@ function AppLayout() {
         <Topbar
           onMenuClick={() => setMobileOpen(prev => !prev)}
           mobileOpen={mobileOpen}
+          onCmdK={() => setCmdOpen(true)}
         />
         <div className="app-content">
           <Routes>
@@ -99,28 +135,38 @@ function AppLayout() {
             <Route path="/lineage"     element={<RoleGuard roles={ENGINEERING_ROLES}><LineagePage /></RoleGuard>} />
             <Route path="/adversarial" element={<RoleGuard roles={ENGINEERING_ROLES}><AdversarialPage /></RoleGuard>} />
             <Route path="/alerts"      element={<RoleGuard roles={[...ENGINEERING_ROLES,...COMPLIANCE_ROLES]}><AlertsPage /></RoleGuard>} />
-            <Route path="/playground"  element={<PlaygroundPage />} />
+            <Route path="/playground"     element={<PlaygroundPage />} />
+            <Route path="/synthetic-media" element={<SyntheticMediaPage />} />
             <Route path="/settings"    element={<RoleGuard roles={['super_admin', 'ml_engineer', 'compliance_officer']}><SettingsPage /></RoleGuard>} />
+            <Route path="/users"       element={<RoleGuard roles={['super_admin']}><UsersPage /></RoleGuard>} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
       </main>
+
+      <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
     </div>
   )
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/*"     element={<RequireAuth><AppLayout /></RequireAuth>} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <LanguageProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/*"     element={<RequireAuth><AppLayout /></RequireAuth>} />
+                </Routes>
+              </BrowserRouter>
+            </ToastProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </LanguageProvider>
+    </ErrorBoundary>
   )
 }

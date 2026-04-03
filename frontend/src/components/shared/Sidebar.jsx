@@ -2,9 +2,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useTheme } from '../../context/ThemeContext'
 import {
-  Shield, LayoutDashboard, Code2, ClipboardList, FileText,
-  Database, Activity, PlayCircle, GitBranch, FlaskConical,
-  Bell, Sun, Moon, LogOut, X, Settings, Terminal
+  LayoutDashboard, Code2, ClipboardList, FileText,
+  Database, Activity,
+  Bell, Sun, Moon, LogOut, X, Settings, Terminal, ShieldCheck, ScanEye, Users2
 } from 'lucide-react'
 
 const NAV = [
@@ -19,20 +19,24 @@ const NAV = [
   {
     section: 'Governance',
     items: [
-      { path: '/policies', label: 'Policies',       icon: FileText,    perm: 'policies:read', roles: ['super_admin','compliance_officer','auditor'] },
-      { path: '/models',   label: 'Model Registry', icon: Database,    perm: 'models:read',   roles: ['super_admin','ml_engineer','compliance_officer','auditor'] },
-      { path: '/audit',    label: 'Audit Logs',     icon: Activity,    perm: 'audit:read',    roles: ['super_admin','compliance_officer','auditor'] },
-      { path: '/simulate', label: 'Batch Simulate', icon: PlayCircle,  perm: 'simulate:run',  roles: ['super_admin','ml_engineer'] },
-      { path: '/playground', label: 'Kavach Playground', icon: Terminal,   perm: 'dashboard:read' },
+      { path: '/policies',        label: 'Policies',          icon: FileText,   perm: 'policies:read',  roles: ['super_admin','compliance_officer','auditor'] },
+      { path: '/models',          label: 'Model Registry',    icon: Database,   perm: 'models:read',    roles: ['super_admin','ml_engineer','compliance_officer','auditor'] },
+      { path: '/audit',           label: 'Audit Logs',        icon: Activity,   perm: 'audit:read',     roles: ['super_admin','compliance_officer','auditor'] },
+      { path: '/playground',      label: 'Kavach Playground', icon: Terminal,   perm: 'simulate:run',   roles: ['super_admin','ml_engineer'] },
+      { path: '/synthetic-media', label: 'Deepfake Verifier', icon: ScanEye,    perm: 'dashboard:read' },
     ],
   },
   {
-    section: 'Advanced',
+    section: 'Monitoring',
     items: [
-      { path: '/lineage',     label: 'Data Lineage',      icon: GitBranch,    perm: 'models:read', roles: ['super_admin','ml_engineer'] },
-      { path: '/adversarial', label: 'Adversarial Tests', icon: FlaskConical, perm: 'models:read', roles: ['super_admin','ml_engineer'] },
-      { path: '/alerts',      label: 'Alerts',            icon: Bell,         perm: 'alerts:read', roles: ['super_admin','ml_engineer','compliance_officer'] },
-      { path: '/settings',    label: 'Settings',          icon: Settings,     perm: 'dashboard:read', roles: ['super_admin', 'ml_engineer', 'compliance_officer'] },
+      { path: '/alerts',   label: 'Alerts',   icon: Bell,     perm: 'alerts:read',    roles: ['super_admin','ml_engineer','compliance_officer'] },
+      { path: '/settings', label: 'Settings', icon: Settings, perm: 'dashboard:read', roles: ['super_admin','ml_engineer','compliance_officer'] },
+    ],
+  },
+  {
+    section: 'Administration',
+    items: [
+      { path: '/users', label: 'User Management', icon: Users2, perm: '*', roles: ['super_admin'] },
     ],
   },
 ]
@@ -104,7 +108,9 @@ export default function Sidebar({ mobileOpen, onClose }) {
                     tabIndex={0}
                     onKeyDown={(e) => e.key === 'Enter' && go(item.path)}
                   >
-                    <item.icon size={14} className="sidebar-item-icon" />
+                    <div className="sidebar-icon-pill">
+                      <item.icon size={14} className="sidebar-item-icon" />
+                    </div>
                     <span>{item.label}</span>
                   </div>
                 ))}
@@ -115,8 +121,15 @@ export default function Sidebar({ mobileOpen, onClose }) {
 
         {/* Footer */}
         <div className="sidebar-footer">
+          <div className="sidebar-bascg-chip">
+            <ShieldCheck size={10} />
+            <span>BASCG Certified Node</span>
+          </div>
+
           <div className="sidebar-item" onClick={toggle} role="button" tabIndex={0}>
-            {dark ? <Sun size={14} className="sidebar-item-icon" /> : <Moon size={14} className="sidebar-item-icon" />}
+            <div className="sidebar-icon-pill">
+              {dark ? <Sun size={14} className="sidebar-item-icon" /> : <Moon size={14} className="sidebar-item-icon" />}
+            </div>
             <span>{dark ? 'Light Mode' : 'Dark Mode'}</span>
           </div>
 
@@ -137,7 +150,9 @@ export default function Sidebar({ mobileOpen, onClose }) {
             onClick={() => { logout(); onClose?.() }}
             role="button" tabIndex={0}
           >
-            <LogOut size={14} className="sidebar-item-icon" />
+            <div className="sidebar-icon-pill">
+              <LogOut size={14} className="sidebar-item-icon" />
+            </div>
             <span>Sign out</span>
           </div>
         </div>

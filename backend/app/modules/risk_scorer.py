@@ -40,8 +40,9 @@ class RiskScorer:
         """Returns risk score between 0.0 (safe) and 1.0 (maximum risk)."""
         context = context or {}
 
-        # If no violations, no fairness flags, and decent confidence → very low risk
-        if not policy_violations and not fairness_flags and confidence >= 0.55:
+        # If no violations, no fairness flags, decent confidence, AND no PII signals → very low risk
+        pii_boost = float(context.get("pii_risk_boost", 0.0))
+        if not policy_violations and not fairness_flags and confidence >= 0.55 and pii_boost == 0.0:
             # Base risk from confidence only (0.0 for 1.0 confidence, 0.07 for 0.95, etc.)
             base = max(0.0, (1.0 - confidence) * self.WEIGHTS["confidence"])
             return round(base, 3)
@@ -57,14 +58,6 @@ class RiskScorer:
 
         # 4. Context component (India-specific signals)
         context_risk = self._compute_context_risk(context)
-
-        # Weighted composite
-        risk_score = (
-            self.WEIGHTS["confidence"] * confidence_risk +
-            self.WEIGHTS["fairness"] * fairness_risk +
-            self.WEIGHTS["policy"] * policy_risk +
-            self.WEIGHTS["context"] * context_risk
-        )
 
         # Weighted composite
         risk_score = (
@@ -110,6 +103,9 @@ class RiskScorer:
 
         if context.get("jurisdiction") == "IN" and not context.get("dpdp_compliant"):
             risk += 0.3
+
+        # PII scanner boost — directly from pii_scanner.PIIScanResult.risk_boost
+        risk += float(context.get("pii_risk_boost", 0.0))
 
         return min(1.0, risk)
 

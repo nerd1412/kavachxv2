@@ -48,6 +48,7 @@ export default function AuditPage() {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [selectedLog, setSelectedLog] = useState(null)
 
   const load = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
@@ -179,7 +180,12 @@ export default function AuditPage() {
                     const riskScore = l.details?.risk_score != null ? (l.details.risk_score * 100).toFixed(0) + '%' : '—'
                     
                     return (
-                      <tr key={l.id}>
+                      <tr
+                        key={l.id}
+                        onClick={() => setSelectedLog(l)}
+                        style={{ cursor: 'pointer', transition: 'background-color 0.15s ease' }}
+                        className="hover-row"
+                      >
                         <td className="font-mono" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{new Date(l.timestamp).toLocaleString()}</td>
                         <td className="font-mono" style={{ fontSize: 10, color: 'var(--text-muted)' }}>{sessionId.substring(0,8)}...</td>
                         <td><span className="badge badge-info">{l.event_type?.replace(/_/g, ' ')}</span></td>
@@ -215,6 +221,84 @@ export default function AuditPage() {
           </>
         )}
       </div>
+
+      {/* --- SIDE DRAWER FOR AUDIT DETAILS --- */}
+      {selectedLog && (
+        <>
+          <div
+            style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(2, 6, 23, 0.45)', zIndex: 1000, backdropFilter: 'blur(2px)' }}
+            onClick={() => setSelectedLog(null)}
+          />
+          <div
+            className="audit-detail-drawer"
+            style={{
+              position: 'fixed', top: 0, right: 0, width: 'min(500px, 100vw)', height: '100%', background: 'var(--bg-card)',
+              borderLeft: '1px solid var(--border)', zIndex: 1001, boxShadow: 'var(--shadow-lg)',
+              display: 'flex', flexDirection: 'column', animation: 'slideIn 0.3s ease-out'
+            }}
+          >
+            <div
+              className="audit-detail-header"
+              style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}
+            >
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>Log Detail</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                  {selectedLog.event_type?.replace(/_/g, ' ').toUpperCase()}
+                </div>
+              </div>
+              <button className="btn btn-secondary btn-xs" onClick={() => setSelectedLog(null)}>Close</button>
+            </div>
+
+            <div className="audit-detail-body" style={{ flex: 1, overflowY: 'auto', padding: '24px' }}>
+              <div style={{ marginBottom: 24, padding: 16, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--green)', fontWeight: 600, fontSize: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+                  <RefreshCw size={14} /> SOVEREIGN LEDGER INTEGRITY CHAIN
+                </div>
+                <div style={{ position: 'relative', paddingLeft: 12, borderLeft: '2px solid var(--border)' }}>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>PREVIOUS BLOCK HASH</div>
+                    <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', background: 'rgba(127, 140, 170, 0.08)', padding: 8, borderRadius: 4, color: 'var(--text-dim)', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                      {selectedLog.prev_hash || "00000...00"}
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, color: 'var(--green)', marginBottom: 4 }}>CURRENT CHAIN HASH</div>
+                    <div style={{
+                      fontSize: 10, fontFamily: 'var(--font-mono)', background: 'var(--green-light)',
+                      padding: 8, borderRadius: 4, color: 'var(--green)', border: '1px solid rgba(16, 185, 129, 0.24)', wordBreak: 'break-word', overflowWrap: 'anywhere'
+                    }}>
+                      {selectedLog.chain_hash}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+                {JSON.stringify(selectedLog.details, null, 2)}
+              </div>
+            </div>
+          </div>
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            .hover-row:hover { background-color: var(--accent-light) !important; }
+            .audit-detail-drawer { max-width: 100vw; }
+            @media (max-width: 768px) {
+              .audit-detail-drawer {
+                width: 100vw !important;
+                border-left: none !important;
+              }
+              .audit-detail-header {
+                padding: 16px !important;
+                align-items: flex-start !important;
+                flex-wrap: wrap;
+              }
+              .audit-detail-body {
+                padding: 16px !important;
+              }
+            }
+          `}} />
+        </>
+      )}
     </div>
   )
 }

@@ -31,11 +31,11 @@ export default function PlaygroundPage() {
   const handleTestManual = async (e) => {
     e?.preventDefault()
     if (!prompt.trim()) return
-    
+
     setLoading(true)
     setResult(null)
     const payload = getContextPayload(selectedContext)
-    
+
     try {
       const response = await governanceAPI.simulate({
         input_data: { ...payload.input_data, prompt: prompt },
@@ -46,6 +46,10 @@ export default function PlaygroundPage() {
       setResult({ input: prompt, response: response.data })
     } catch (err) {
       console.error(err)
+      setResult({
+        input: prompt,
+        error: err.response?.data?.detail || err.message || "Unknown error occurred"
+      })
     } finally {
       setLoading(false)
     }
@@ -73,7 +77,7 @@ export default function PlaygroundPage() {
         <p className="page-desc">Simulate how your LLM application will interact with the KavachX Governance Engine.</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 2.5fr', gap: 24 }}>
+      <div className="playground-layout" style={{ display: 'grid', gridTemplateColumns: '1.5fr 2.5fr', gap: 24 }}>
         {/* Left: Configuration */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           <Card title="1. Select Application Context">
@@ -119,13 +123,14 @@ export default function PlaygroundPage() {
           <Card title="2. Execute Manual Prompt">
             <form onSubmit={handleTestManual} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ position: 'relative' }}>
-                <textarea 
+                <textarea
+                  className="playground-textarea"
                   value={prompt}
                   onChange={e => setPrompt(e.target.value)}
                   placeholder="Type a prompt to test policy violations... (e.g. 'Show me my neighbors debt records')"
-                  style={{ 
-                    width: '100%', minHeight: 100, padding: '12px 14px', borderRadius: 10, 
-                    border: '1px solid var(--border)', background: 'var(--bg-input)', 
+                  style={{
+                    width: '100%', minHeight: 100, padding: '12px 14px', borderRadius: 10,
+                    border: '1px solid var(--border)', background: 'var(--bg-input)',
                     color: 'var(--text)', fontSize: 14, resize: 'none', lineHeight: 1.5
                   }}
                   onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleTestManual(e)}
@@ -134,9 +139,9 @@ export default function PlaygroundPage() {
                   Press Ctrl+Enter to send
                 </div>
               </div>
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
+              <button
+                type="submit"
+                className="playground-submit btn btn-primary"
                 disabled={loading || !prompt.trim()}
                 style={{ alignSelf: 'flex-end', gap: 8, padding: '10px 24px' }}
               >
@@ -149,20 +154,20 @@ export default function PlaygroundPage() {
           {/* Engine Output */}
           <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', minHeight: 300 }}>
             <div className="card-header" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="playground-console-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
                 <span className="card-title">KavachX Governance Console</span>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>MODE: KAVACH_ENFORCEMENT</div>
+                <div className="playground-console-mode" style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>MODE: KAVACH_ENFORCEMENT</div>
               </div>
             </div>
-            
-            <div style={{ flex: 1, background: '#0a0c16', color: '#8b949e', padding: 18, fontFamily: 'var(--font-mono)', fontSize: 12, overflow: 'auto' }}>
+
+            <div className="playground-console-body" style={{ flex: 1, background: '#0a0c16', color: '#8b949e', padding: 18, fontFamily: 'var(--font-mono)', fontSize: 12, overflow: 'auto' }}>
               {!result && !loading && (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
                   <Search size={40} style={{ marginBottom: 12 }} />
                   <div>System standby. Enter a prompt to begin governance analysis.</div>
                 </div>
               )}
-              
+
               {loading && (
                 <div className="fade-in" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <div className="dot dot-blue spin" />
@@ -170,13 +175,27 @@ export default function PlaygroundPage() {
                 </div>
               )}
 
-              {result && (
+              {result && result.error && (
+                <div className="fade-in">
+                  <div style={{ color: '#ff7b72', marginBottom: 16, padding: '12px', background: '#ff000010', border: '1px solid #ff000030', borderRadius: 4 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <AlertTriangle size={16} />
+                      GOVERNANCE ENGINE ERROR
+                    </div>
+                    <div style={{ fontSize: 11, color: '#8b949e', whiteSpace: 'pre-wrap' }}>
+                      {result.error}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {result && !result.error && (
                 <div className="fade-in">
                   <div style={{ color: '#58a6ff', marginBottom: 6 }}>{`// Incoming Traffic Detected`}</div>
                   <div style={{ color: '#e6edf3', marginBottom: 16, padding: '10px', background: '#ffffff05', borderRadius: 4 }}>
                     {result.input}
                   </div>
-                  
+
                   <div style={{ color: getStatusColor(result.response.enforcement_decision), fontWeight: 700, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10, fontSize: 14 }}>
                     {getStatusIcon(result.response.enforcement_decision)}
                     {`KAVACH DECISION: ${result.response.enforcement_decision}`}
@@ -194,7 +213,7 @@ export default function PlaygroundPage() {
                       ))
                     ) : (
                       <div style={{ color: '#3fb950', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <CheckCircle size={16} /> 
+                        <CheckCircle size={16} />
                         <span>Clean Transaction. No violations against the metadata signatures.</span>
                       </div>
                     )}
@@ -212,7 +231,34 @@ export default function PlaygroundPage() {
           </div>
         </div>
       </div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media (max-width: 768px) {
+          .playground-layout {
+            grid-template-columns: 1fr !important;
+            gap: 16px !important;
+          }
+          .playground-submit {
+            width: 100%;
+            justify-content: center;
+            align-self: stretch !important;
+          }
+          .playground-console-header {
+            flex-direction: column;
+            align-items: flex-start !important;
+          }
+          .playground-console-mode {
+            word-break: break-word;
+          }
+          .playground-console-body {
+            padding: 14px !important;
+            font-size: 11px !important;
+          }
+          .playground-textarea {
+            min-height: 140px;
+            padding-bottom: 32px !important;
+          }
+        }
+      `}} />
     </div>
   )
 }
-

@@ -34,6 +34,11 @@ async def evaluate_inference(
     model = result.scalar_one_or_none()
     
     if not model:
+        # Fallback to name search for developer convenience
+        result = await db.execute(select(AIModel).where(AIModel.name == request.model_id))
+        model = result.scalar_one_or_none()
+
+    if not model:
         raise HTTPException(status_code=404, detail=f"Model '{request.model_id}' not registered. Please register it first.")
     if model.status == "suspended":
         raise HTTPException(status_code=403, detail="Model is suspended from inference")

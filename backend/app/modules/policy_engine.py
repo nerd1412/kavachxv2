@@ -1,4 +1,4 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from app.models.schemas import EnforcementDecision
 
 BUILT_IN_POLICIES = [
@@ -189,15 +189,23 @@ BUILT_IN_POLICIES = [
             {"rule_id": "builtin-ctx-002", "condition": "multilingual_accuracy_gap", "threshold": 0.08, "action": "alert", "message": "Language accuracy gap exceeds +/- 8% equity threshold."},
         ]
     },
+    # External AI usage is captured in context_metadata for compliance logging
+    # but does NOT generate a policy violation/alert on every harmless prompt.
+
+    # ── BASCG T2-A: PII & Sensitive Document Shield ─────────────────────────────
+    # Self-contained: fires on pii_detected flag set by the governance service.
+    # Covers Indian (Aadhaar, PAN, VPA, Passport, DL, Voter ID, GSTIN, IFSC)
+    # and Global (SSN, Credit Card, IBAN, NHS, NI, SIN, Medicare, TFN) formats.
     {
-        "id": "builtin-external-ai",
-        "name": "Kavach Sentinel - External AI Governance",
-        "description": "Monitors usage of external AI platforms (ChatGPT, Claude, Gemini, Copilot, etc.)",
-        "policy_type": "compliance",
-        "severity": "low",
+        "id": "builtin-pii-shield",
+        "name": "PII & Sensitive Document Shield (Indian + Global)",
+        "description": "Blocks prompts that contain or attempt to leak personal identity documents or financial identifiers.",
+        "policy_type": "privacy",
+        "severity": "critical",
         "jurisdiction": "GLOBAL",
         "rules": [
-            {"rule_id": "builtin-external-ai-001", "condition": "unauthorized_tool_detected", "threshold": None, "action": "alert", "message": "External AI platform usage logged for compliance monitoring."},
+            {"rule_id": "builtin-pii-001", "condition": "pii_detected", "threshold": None, "action": "block",
+             "message": "Sensitive PII detected: Personal identity document or financial identifier found in prompt. Blocked under DPDP Act 2023 / GDPR."},
         ]
     },
     {
@@ -226,7 +234,7 @@ class PolicyEngine:
         inference_data: Dict[str, Any],
         fairness_results: List[Dict],
         risk_score: float
-    ) -> tuple[List[Dict], EnforcementDecision]:
+    ) -> Tuple[List[Dict], EnforcementDecision]:
         """
         Evaluate all active policies against an inference event.
         Returns (violations list, final enforcement decision).
@@ -266,14 +274,10 @@ class PolicyEngine:
         confidence = inference_data.get("confidence", 1.0)
 
         # 1. Fairness conditions
-        # Each condition first checks the FairnessMonitor flag results,
-        # then falls back to direct signal fields from simulation scenarios.
         if condition == "caste_proxy_detected":
-            # Check FairnessMonitor result first
             disparity = next((f.get("disparity", 0) for f in fairness_results if f.get("metric") == "caste_proxy_correlation"), None)
             if disparity is not None:
                 return disparity > (threshold or 0.08)
-            # Fallback: direct signal from simulation payload
             direct = max(
                 float(input_data.get("caste_proxy_score", 0)),
                 float(context.get("caste_proxy_disparity", 0)),
@@ -281,11 +285,9 @@ class PolicyEngine:
             return direct > (threshold or 0.08)
 
         elif condition == "gender_disparity_detected":
-            # Check FairnessMonitor result first
             disparity = next((f.get("disparity", 0) for f in fairness_results if f.get("metric") == "gender_disparity"), None)
             if disparity is not None:
                 return disparity > (threshold or 0.10)
-            # Fallback: direct signal from simulation payload
             direct = max(
                 float(input_data.get("gender_proxy", 0)),
                 float(context.get("gender_disparity", 0)),
@@ -294,11 +296,9 @@ class PolicyEngine:
             return direct > (threshold or 0.10)
 
         elif condition == "multilingual_accuracy_gap":
-            # Check FairnessMonitor result first
             disparity = next((f.get("disparity", 0) for f in fairness_results if f.get("metric") == "multilingual_equity"), None)
             if disparity is not None:
                 return disparity > (threshold or 0.08)
-            # Fallback: performance_gap_pct field from simulation payload (convert percent to decimal)
             gap_pct = float(input_data.get("performance_gap_pct", 0))
             return (gap_pct / 100.0) > (threshold or 0.08)
 
@@ -335,8 +335,15 @@ class PolicyEngine:
             in_healthcare = context.get("domain") == "healthcare" or context.get("model_category") == "healthcare"
             return in_healthcare and confidence < (threshold or 0.70)
 
+        elif condition == "pii_detected":
+            # Fires when governance_service has confirmed PII was found in the prompt
+            return input_data.get("pii_detected") is True
+
         elif condition == "personal_data_without_consent":
-            return input_data.get("personal_data_used") is True and input_data.get("consent_verified") is False
+            # Treat missing consent_verified as unconsented (None != False — explicit fix)
+            personal_data = input_data.get("personal_data_used") is True
+            consent_verified = input_data.get("consent_verified")
+            return personal_data and consent_verified is not True
 
         elif condition == "abdm_consent_missing":
             return (input_data.get("abdm_linked") is True or context.get("abdm") is True) and input_data.get("consent_verified") is False
@@ -376,11 +383,6 @@ class PolicyEngine:
 
 
     def _map_action(self, action: str) -> EnforcementDecision:
-        """
-        Map rule actions into the enforcement hierarchy.
-        'suspend' is treated as a hard BLOCK at inference level;
-        suspension of the model itself is enforced by higher layers.
-        """
         normalized = str(action or "").lower()
         if normalized in ("allow", "pass"):
             return EnforcementDecision.PASS

@@ -59,19 +59,75 @@ async def list_policies(db: AsyncSession = Depends(get_db)):
 
 @router.post("/")
 async def create_policy(policy: PolicyCreate, db: AsyncSession = Depends(get_db), current_user=Depends(require_permission("policies:write"))):
+    from app.services.policy_bundle_service import policy_bundle_service
+    from app.core.crypto import crypto_service as _cs
+    policy_id = str(uuid.uuid4())
+    rules_raw = [r.model_dump() for r in policy.rules]
+
+    # BASCG P0: auto-sign so GovernanceService._load_federated_policies accepts it
+    policy_dict = {
+        "id": policy_id, "name": policy.name,
+        "description": policy.description or "",
+        "policy_type": policy.policy_type, "severity": policy.severity,
+        "jurisdiction": policy.jurisdiction, "rules": rules_raw,
+    }
+    sig = policy_bundle_service.sign_db_policy_payload(policy_dict)
+
     new = GovernancePolicy(
-        id=str(uuid.uuid4()),
-        name=policy.name,
-        description=policy.description,
-        policy_type=policy.policy_type,
-        rules=[r.model_dump() for r in policy.rules],
-        severity=policy.severity,
-        jurisdiction=policy.jurisdiction,
+        id=policy_id, name=policy.name, description=policy.description,
+        policy_type=policy.policy_type, rules=rules_raw,
+        severity=policy.severity, jurisdiction=policy.jurisdiction,
+        policy_signature=sig, signed_by=_cs.signer.issuer, bundle_version="1.0",
     )
     db.add(new)
     await db.commit()
     await db.refresh(new)
-    return {"id": new.id, "name": new.name, "enabled": new.enabled}
+    return {"id": new.id, "name": new.name, "enabled": new.enabled, "signed_by": new.signed_by}
+
+
+@router.put("/{policy_id}")
+async def update_policy(
+    policy_id: str,
+    policy: PolicyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_permission("policies:write")),
+):
+    """Full policy update. Re-signs the row so governance engine accepts it."""
+    if policy_id.startswith("builtin"):
+        raise HTTPException(status_code=400, detail="Cannot modify built-in baseline policies")
+    result = await db.execute(select(GovernancePolicy).where(GovernancePolicy.id == policy_id))
+    p = result.scalar_one_or_none()
+    if not p:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    from app.services.policy_bundle_service import policy_bundle_service
+    from app.core.crypto import crypto_service as _cs
+
+    rules_raw = [r.model_dump() for r in policy.rules]
+    policy_dict = {
+        "id": policy_id, "name": policy.name,
+        "description": policy.description or "",
+        "policy_type": policy.policy_type, "severity": policy.severity,
+        "jurisdiction": policy.jurisdiction, "rules": rules_raw,
+    }
+    sig = policy_bundle_service.sign_db_policy_payload(policy_dict)
+
+    p.name = policy.name
+    p.description = policy.description
+    p.policy_type = policy.policy_type
+    p.rules = rules_raw
+    p.severity = policy.severity
+    p.jurisdiction = policy.jurisdiction
+    p.policy_signature = sig
+    p.signed_by = _cs.signer.issuer
+    await db.commit()
+    await db.refresh(p)
+    return {
+        "id": p.id, "name": p.name, "description": p.description,
+        "policy_type": p.policy_type, "severity": p.severity,
+        "jurisdiction": p.jurisdiction, "enabled": p.enabled,
+        "signed_by": p.signed_by,
+    }
 
 
 @router.patch("/{policy_id}/toggle")

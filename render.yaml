@@ -4,13 +4,26 @@ services:
     runtime: python
     plan: free
     buildCommand: "cd frontend && npm install && npm run build && cd ../backend && pip install -r requirements.txt"
-    startCommand: "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    startCommand: "cd backend && bash start.sh"
     envVars:
       - key: ENVIRONMENT
         value: production
       - key: SECRET_KEY
         generateValue: true
       - key: PYTHON_VERSION
-        value: 3.10.0
+        value: 3.11.0
+      # IMPORTANT: Set CORS_ORIGINS to your actual frontend domain(s), never use "*" in production
+      # Example: https://kavachx.yourdomain.com
       - key: CORS_ORIGINS
-        value: "*"
+        sync: false
+      - key: DATABASE_URL
+        # For production, use a PostgreSQL connection string:
+        # postgresql+asyncpg://user:password@host:5432/kavachx
+        sync: false
+      - key: BASCG_SIGNING_KEY_SEED_B64
+        # Required: run `python scripts/generate_dev_keys.py` and set the output here
+        sync: false
+      - key: MOCK_TSA_SECRET
+        generateValue: true
+      - key: EXPOSE_DEMO_PASSWORDS
+        value: "false"

@@ -1,242 +1,186 @@
 /**
- * KavachX Browser Extension - Universal AI Platform Content Interceptor
- * INTERCEPT → EVALUATE → RELEASE
+ * KavachX Browser Extension — Precision Interceptor (v7)
  *
- * This content script must:
- * - Reliably find prompt text across DOM + Shadow DOM.
- * - Block the original submission event until governance decision is returned.
- * - Only release the native action when Kavach returns PASS/ALERT/HUMAN_REVIEW.
- * - Hard-block on BLOCK decisions.
+ * Fix v6 → v7: Re-dispatch loop resolved.
+ * - After PASS/ALERT, we find and CLICK the real Send button instead of
+ *   simulating a keyboard event (which gets caught by the interceptor again).
+ * - A `bypassing` flag at the very top of the handler prevents any
+ *   re-entry during the release window.
+ * - Only `enforcement_decision === "BLOCK"` stops the prompt.
  */
 
 (function () {
-  console.log('🛡️ Kavach AI Shield: Intercept-Evaluate-Release active on', window.location.hostname);
+  'use strict';
 
-  let lastInterceptedText = '';
-  let lastInterceptTime = 0;
+  if (window.__kavachxInjectedV7) return;
+  window.__kavachxInjectedV7 = true;
 
-  let pendingSubmission = null; // { type: 'keyboard'|'click', originalEvent, triggerElement }
+  console.log('🛡️ Kavach AI Shield v7: Precision Interceptor Active');
 
-  /**
-   * Robust node walker that crawls DOM + shadow roots to discover
-   * visible, editable elements that are likely to contain prompts.
-   */
-  const findPromptNodeAndValue = () => {
-    const selectors = [
+  let evaluating = false; // True while waiting for backend response
+  let bypassing  = false; // True during the release window (prevents re-interception)
+
+  // ─── Shadow-DOM Aware Prompt Scraper ──────────────────────────────────────
+  function findPrompt() {
+    const SELECTORS = [
       '#prompt-textarea',
-      'textarea[placeholder*="Message"]',
+      'div[contenteditable="true"]',
       '.ProseMirror',
-      'textarea[placeholder*="Talk to"]',
-      '#editable-content-area',
-      'textarea[placeholder*="Ask"]',
-      'textarea[placeholder*="Type"]',
-      'textarea[placeholder*="Send"]',
       '[role="textbox"]',
-      '[contenteditable="true"]',
-      'textarea',
-      'input[type="text"]',
+      'textarea'
     ];
-
-    const visitedRoots = new Set();
-
-    const collectFromRoot = (root) => {
-      if (!root || visitedRoots.has(root)) return [];
-      visitedRoots.add(root);
-
-      const hits = [];
-      selectors.forEach((sel) => {
-        try {
-          root.querySelectorAll(sel).forEach((el) => {
-            if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return;
-            const val = (el.value || el.innerText || el.textContent || '').trim();
-            if (val && val.length > 0) {
-              hits.push({ el, text: val });
-            }
-          });
-        } catch {
-          // ignore selector errors
+    const findInRoot = (root) => {
+      for (const s of SELECTORS) {
+        const el = root.querySelector(s);
+        if (el && el.offsetParent !== null) {
+          const val = (el.value || el.innerText || el.textContent || '').trim();
+          if (val.length > 2) return { el, text: val };
         }
-      });
-
-      // Recurse into any shadow roots
-      root.querySelectorAll('*').forEach((n) => {
-        if (n.shadowRoot) {
-          hits.push(...collectFromRoot(n.shadowRoot));
+      }
+      for (const child of root.querySelectorAll('*')) {
+        if (child.shadowRoot) {
+          const found = findInRoot(child.shadowRoot);
+          if (found) return found;
         }
-      });
-
-      return hits;
+      }
+      return null;
     };
+    return findInRoot(document);
+  }
 
-    let candidates = collectFromRoot(document);
-
-    if (candidates.length === 0) {
-      // Greedy fallback across visible editable containers
-      const extra = [];
-      const pushIfVisible = (node) => {
-        if (!node || node.offsetWidth === 0 || node.offsetHeight === 0) return;
-        const text = (node.innerText || node.value || '').trim();
-        if (text && text.length > 0) {
-          extra.push({ el: node, text });
-        }
-      };
-
-      document.querySelectorAll('div[contenteditable], textarea').forEach(pushIfVisible);
-      document.querySelectorAll('*').forEach((n) => {
-        if (n.shadowRoot) {
-          n.shadowRoot.querySelectorAll('div[contenteditable], textarea').forEach(pushIfVisible);
-        }
-      });
-
-      candidates = extra;
+  // ─── Find the real Send button ────────────────────────────────────────────
+  function findSendButton() {
+    // ChatGPT, Claude, Gemini, Copilot — ordered by specificity
+    const SEND_SELECTORS = [
+      '[data-testid="send-button"]',
+      'button[aria-label="Send prompt"]',
+      'button[aria-label="Send message"]',
+      'button[aria-label="Send"]',
+      'button[type="submit"]',
+      'button.send-button',
+      'form button:last-of-type',
+    ];
+    for (const s of SEND_SELECTORS) {
+      const btn = document.querySelector(s);
+      if (btn && !btn.disabled) return btn;
     }
+    return null;
+  }
 
-    if (!candidates.length) return { el: null, text: '' };
+  // ─── Release (PASS / ALERT) ───────────────────────────────────────────────
+  function releasePrompt() {
+    bypassing = true;
 
-    // Prefer medium-length prompts; otherwise pick longest
-    let best = candidates[0];
-    for (const c of candidates) {
-      if (c.text.length > 3 && c.text.length < 5000) {
-        best = c;
-        break;
-      }
-      if (c.text.length > best.text.length) best = c;
-    }
-
-    return { el: best.el, text: best.text };
-  };
-
-  const sendToKavach = (text, triggerMeta) => {
-    if (!text) return;
-
-    const now = Date.now();
-    if (text === lastInterceptedText && now - lastInterceptTime < 1000) return;
-
-    lastInterceptedText = text;
-    lastInterceptTime = now;
-
-    try {
-      if (!chrome.runtime || !chrome.runtime.id) return;
-      console.log('🛡️ KavachX: Intercepted prompt →', text.substring(0, 80) + '…');
-      chrome.runtime.sendMessage({
-        action: 'evaluate_prompt',
-        prompt: text,
-        domain: window.location.hostname,
-        triggerMeta,
-      });
-    } catch {
-      // ignore; if runtime is unavailable the original event will continue
-    }
-  };
-
-  /**
-   * Once a governance decision is received from background,
-   * decide whether to release or permanently block the original event.
-   */
-  const handleGovernanceDecision = (decisionPayload) => {
-    const { decision, explanation } = decisionPayload || {};
-    if (!pendingSubmission) return;
-
-    const original = pendingSubmission;
-    pendingSubmission = null;
-
-    if (decision === 'BLOCK') {
-      console.warn('🛡️ KavachX: Prompt blocked by governance engine.', explanation?.reason);
-      // Hard-block: do NOT re-dispatch the event. Optionally show inline banner.
-      try {
-        if (original.triggerElement) {
-          original.triggerElement.dispatchEvent(
-            new CustomEvent('kavachx:block', {
-              bubbles: true,
-              detail: { reason: explanation?.reason || 'Policy violation detected.' },
-            }),
-          );
-        }
-      } catch {
-        // ignore
-      }
+    // Strategy 1: click the real send button
+    const sendBtn = findSendButton();
+    if (sendBtn) {
+      console.log('🛡️ [Kavach] Releasing via Send button click');
+      sendBtn.click();
+      setTimeout(() => { bypassing = false; }, 800);
       return;
     }
 
-    // PASS / ALERT / HUMAN_REVIEW → allow original intent to proceed
-    try {
-      if (original.type === 'keyboard' && original.triggerElement) {
-        // Synthesize a new Enter keydown that the page can handle normally
-        const ev = new KeyboardEvent('keydown', {
-          key: 'Enter',
-          code: 'Enter',
-          keyCode: 13,
-          which: 13,
-          bubbles: true,
-          cancelable: true,
-        });
-        original.triggerElement.dispatchEvent(ev);
-      } else if (original.type === 'click' && original.triggerElement) {
-        const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
-        original.triggerElement.dispatchEvent(ev);
-      }
-    } catch (e) {
-      console.warn('KavachX: Failed to replay original event', e);
+    // Strategy 2: requestSubmit() on the form
+    const form = document.querySelector('form');
+    if (form) {
+      console.log('🛡️ [Kavach] Releasing via form.requestSubmit()');
+      try { form.requestSubmit(); } catch (_) { form.submit(); }
+      setTimeout(() => { bypassing = false; }, 800);
+      return;
     }
-  };
 
-  // Listen for governance decisions coming back from background.js
-  chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
-    if (msg && msg.action === 'governance_result') {
-      handleGovernanceDecision(msg.payload);
+    // Strategy 3: dispatch Enter on document.activeElement
+    console.log('🛡️ [Kavach] Releasing via Enter on active element');
+    const target = document.activeElement || document.body;
+    target.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', code: 'Enter', keyCode: 13,
+      which: 13, bubbles: true, cancelable: false
+    }));
+    setTimeout(() => { bypassing = false; }, 800);
+  }
+
+  // ─── Security Banner ──────────────────────────────────────────────────────
+  function showBanner(msg) {
+    document.getElementById('kavachx-block-alert')?.remove();
+    const b = document.createElement('div');
+    b.id = 'kavachx-block-alert';
+    b.style.cssText = [
+      'position:fixed', 'top:30px', 'left:50%', 'transform:translateX(-50%)',
+      'background:#0f0f0f', 'color:#f87171', 'padding:18px 28px',
+      'border-radius:12px', 'z-index:2147483647', 'font-family:system-ui,sans-serif',
+      'box-shadow:0 12px 40px rgba(0,0,0,0.8)', 'border:2px solid #ef4444',
+      'text-align:center', 'max-width:440px', 'line-height:1.5'
+    ].join(';');
+    b.innerHTML = `
+      <strong>🚨 KAVACH SECURITY BLOCK</strong>
+      <div style="margin-top:8px;font-size:14px;opacity:0.92;">${msg}</div>
+    `;
+    document.body.appendChild(b);
+    setTimeout(() => {
+      b.style.transition = 'opacity 0.5s';
+      b.style.opacity = '0';
+      setTimeout(() => b.remove(), 500);
+    }, 7000);
+  }
+
+  // ─── Main Interceptor ─────────────────────────────────────────────────────
+  function handler(e) {
+    // GUARD 1: We are in the release window — let the event through untouched
+    if (bypassing) return;
+
+    // GUARD 2: Debounce — we are already waiting for a backend response
+    if (evaluating) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
     }
-  });
 
-  // 1. Universal Keyboard Listener (Enter keys) — PREVENT DEFAULT, then evaluate
-  document.addEventListener(
-    'keydown',
-    (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        const active = document.activeElement;
-        const { el, text } = findPromptNodeAndValue();
-        const targetEl = active && (active.isContentEditable || active.tagName === 'TEXTAREA' || active.tagName === 'INPUT') ? active : el;
+    // Key filter: only Enter without Shift
+    if (e.type === 'keydown' && (e.key !== 'Enter' || e.shiftKey)) return;
 
-        if (text && targetEl) {
-          // Intercept submission
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          pendingSubmission = { type: 'keyboard', originalEvent: e, triggerElement: targetEl };
-          sendToKavach(text, { mode: 'keyboard', tag: targetEl.tagName });
+    // Click filter: only the Send button area
+    if (['click', 'mousedown', 'pointerdown'].includes(e.type)) {
+      const btn = e.target.closest('button, [role="button"], [data-testid*="send"], svg');
+      if (!btn) return;
+    }
+
+    const result = findPrompt();
+    if (!result || result.text.length < 3) return;
+
+    // INTERCEPT
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    evaluating = true;
+
+    console.log(`🛡️ [Kavach] Intercepted: "${result.text.substring(0, 45)}..."`);
+
+    chrome.runtime.sendMessage(
+      { action: 'evaluate_prompt', prompt: result.text, domain: window.location.hostname },
+      (response) => {
+        evaluating = false;
+
+        if (chrome.runtime.lastError || !response) {
+          console.warn('🛡️ [Kavach] Engine unreachable — blocking for safety');
+          showBanner('Governance Engine Offline — Prompt Blocked for Safety');
+          return;
+        }
+
+        const decision = (response.decision || 'PASS').toUpperCase();
+        console.log(`🛡️ [Kavach] Decision: ${decision}`);
+
+        if (decision === 'BLOCK') {
+          showBanner(response.reason || 'Blocked by KavachX Governance Policy');
+        } else {
+          // PASS or ALERT → release silently, audit log written to dashboard
+          releasePrompt();
         }
       }
-    },
-    true,
-  );
+    );
+  }
 
-  // 2. Universal Click Listener (Send buttons/icons) — PREVENT DEFAULT, then evaluate
-  document.addEventListener(
-    'click',
-    (e) => {
-      const target = e.target;
-      if (!target) return;
-      const clickable = target.closest('button, [role="button"], [data-testid*="send"], [aria-label*="Send"], [aria-label*="submit"]');
-      if (!clickable) return;
-
-      const { el, text } = findPromptNodeAndValue();
-      if (text && el) {
-        e.stopImmediatePropagation();
-        e.preventDefault();
-        pendingSubmission = { type: 'click', originalEvent: e, triggerElement: clickable };
-        sendToKavach(text, { mode: 'click', tag: clickable.tagName });
-      }
-    },
-    true,
-  );
-
-  // 3. MutationObserver placeholder to support future behavioral monitoring hooks
-  const observer = new MutationObserver(() => {
-    // Reserved: can emit additional telemetry if needed.
+  // Capture phase on all relevant events
+  ['keydown', 'click', 'mousedown'].forEach(type => {
+    document.addEventListener(type, handler, true);
   });
 
-  try {
-    observer.observe(document.body, { childList: true, subtree: true });
-  } catch {
-    // ignore
-  }
 })();
-

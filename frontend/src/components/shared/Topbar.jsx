@@ -1,7 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { useTheme } from '../../context/ThemeContext'
 import { useAuth } from '../../context/AuthContext'
-import { Shield, ChevronRight, Sun, Moon, Bell, Menu, X } from 'lucide-react'
+import { ChevronRight, Sun, Moon, Bell, Menu, X } from 'lucide-react'
 
 const TITLES = {
   '/':            ['Dashboards', 'Executive View'],
@@ -16,9 +16,11 @@ const TITLES = {
   '/adversarial': ['Advanced', 'Adversarial Tests'],
   '/alerts':      ['Advanced', 'Alerts'],
   '/settings':    ['Advanced', 'Settings & API Keys'],
+  '/playground':      ['Governance', 'Kavach Playground'],
+  '/synthetic-media': ['BASCG P3',  'Deepfake Verifier'],
 }
 
-export default function Topbar({ onMenuClick, mobileOpen }) {
+export default function Topbar({ onMenuClick, mobileOpen, onCmdK }) {
   const { dark, toggle } = useTheme()
   const { user } = useAuth()
   const loc = useLocation()
@@ -52,6 +54,17 @@ export default function Topbar({ onMenuClick, mobileOpen }) {
         </span>
       </div>
 
+      {/* ⌘K search trigger */}
+      <button
+        className="topbar-cmd-trigger"
+        onClick={onCmdK}
+        title="Open command palette (⌘K)"
+        aria-label="Open command palette"
+      >
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Search…</span>
+        <kbd style={{ fontSize: 9.5, padding: '1px 5px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 4, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', lineHeight: 1.7, flexShrink: 0 }}>⌘K</kbd>
+      </button>
+
       {/* Breadcrumb */}
       <div className="topbar-breadcrumb">
         {section && (
@@ -65,6 +78,14 @@ export default function Topbar({ onMenuClick, mobileOpen }) {
 
       {/* Actions */}
       <div className="topbar-actions">
+        {/* System health — TEE / NAEL / Ledger */}
+        <div className="sys-health" title="TEE · NAEL · Sovereign Ledger">
+          <div className="sys-health-dot ok" title="TEE Attestation" />
+          <div className="sys-health-dot ok" title="NAEL Licensing" />
+          <div className="sys-health-dot ok" title="Sovereign Ledger" />
+          <span className="sys-health-label" style={{ fontSize: 9, marginLeft: 2 }}>SYS</span>
+        </div>
+
         <button
           className="topbar-btn"
           onClick={toggle}

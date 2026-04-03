@@ -11,3 +11,13 @@ pytest==7.4.2
 pytest-asyncio==0.21.1
 asyncpg>=0.28.0
 httpx>=0.25.0
+huggingface-hub>=0.20.0
+cbor2>=5.4.6        # BASCG: AWS Nitro attestation document (COSE_Sign1) parsing
+# ── OCR (optional — install for image/document PII scanning) ──────────────
+# System dep required first:
+#   macOS:  brew install tesseract
+#   Linux:  apt-get install tesseract-ocr
+# Then: pip install pytesseract Pillow
+# The governance engine detects their presence at runtime and enables OCR.
+pytesseract>=0.3.10
+Pillow>=10.0.0
