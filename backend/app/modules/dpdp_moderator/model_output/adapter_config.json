@@ -22,6 +22,10 @@
     "pre_classifier",
     "classifier",
     "classifier",
+    "score",
+    "classifier",
+    "score",
+    "classifier",
     "score"
   ],
   "peft_type": "LORA",

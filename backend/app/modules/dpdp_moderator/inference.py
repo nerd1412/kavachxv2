@@ -461,6 +461,10 @@ _REGULATORY_QUERY_PATTERN = re.compile(
     # Negative lookahead excludes "help me understand how to [violate/bypass]".
     r"|can\s+you\s+help\s+me\s+understand(?!\s+how\s+to\s+(?:bypass|circumvent|ignor|violat|avoid|evad))\b"
     r"|help\s+me\s+understand\s+(credit\s+scor\w*|what\s+is|the\s+(meaning|definition)|pii|dpdp|privacy\s+law)\b"
+    # Analytical "explain what makes X a violation/dark pattern" — educational framing,
+    # not operational instruction.  The speaker is ANALYSING the violation, not requesting it.
+    r"|explain\s+what\s+makes\b"
+    r"|explain\s+why\s+\w[\w\s]{1,50}(is\s+a\s+(violation|dark\s+pattern|deceptive|illegal|non.?compliant)|violates\b)"
     r")",
     re.IGNORECASE,
 )
@@ -477,11 +481,18 @@ _EXPLICIT_VIOLATION_QUERY = re.compile(
 
 # Analytical policy questions: "How do companies typically X?", "Can I know X from Y?"
 # These describe how organisations operate or test inference — borderline REVIEW.
+# Also covers ambiguous campaign/operational final-turn prompts where prior context
+# is unknown — without context, the worst-case verdict is REVIEW, never BLOCK.
 # Risk ceiling: 0.70 (max REVIEW, never BLOCK).
 _POLICY_QUESTION_PATTERN = re.compile(
     r"\b("
     r"how\s+do\s+(companies|organisations|firms|businesses)\s+typically\b"
     r"|can\s+i\s+know\b.{0,50}\bfrom\s+(their|his|her|someone)\b"
+    # Ambiguous campaign execution: "go ahead and run/launch the campaign"
+    # Without prior context establishing consent violation, cap at REVIEW.
+    # A hard BLOCK requires explicit violation signals (e.g., "without consent").
+    r"|go\s+ahead\s+(?:and\s+)?(?:run|launch|send|execute)\s+the\s+(?:marketing\s+)?campaign\b"
+    r"|proceed\s+with\s+the\s+(?:marketing\s+)?campaign\b"
     r")",
     re.IGNORECASE | re.DOTALL,
 )

@@ -1,71 +1,71 @@
 {
   "safe": {
-    "precision": 0.8837,
-    "recall": 0.8444,
-    "f1": 0.8636,
-    "support": 45.0,
-    "fn_rate": 0.1556,
-    "fp_rate": 0.0159
+    "precision": 0.9545,
+    "recall": 0.9545,
+    "f1": 0.9545,
+    "support": 22.0,
+    "fn_rate": 0.0455,
+    "fp_rate": 0.0063
   },
   "personal_data": {
-    "precision": 0.9348,
-    "recall": 0.9556,
-    "f1": 0.9451,
-    "support": 45.0,
-    "fn_rate": 0.0444,
-    "fp_rate": 0.0095
-  },
-  "financial_data": {
-    "precision": 0.9574,
-    "recall": 1.0,
-    "f1": 0.9783,
-    "support": 45.0,
-    "fn_rate": 0.0,
-    "fp_rate": 0.0063
-  },
-  "health_data": {
-    "precision": 0.9565,
-    "recall": 0.9778,
-    "f1": 0.967,
-    "support": 45.0,
-    "fn_rate": 0.0222,
-    "fp_rate": 0.0063
-  },
-  "profiling": {
     "precision": 1.0,
-    "recall": 0.9556,
-    "f1": 0.9773,
-    "support": 45.0,
-    "fn_rate": 0.0444,
+    "recall": 1.0,
+    "f1": 1.0,
+    "support": 22.0,
+    "fn_rate": 0.0,
     "fp_rate": 0.0
   },
-  "surveillance": {
-    "precision": 0.9375,
+  "financial_data": {
+    "precision": 1.0,
     "recall": 1.0,
-    "f1": 0.9677,
-    "support": 45.0,
+    "f1": 1.0,
+    "support": 23.0,
     "fn_rate": 0.0,
-    "fp_rate": 0.0095
+    "fp_rate": 0.0
+  },
+  "health_data": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "support": 23.0,
+    "fn_rate": 0.0,
+    "fp_rate": 0.0
+  },
+  "profiling": {
+    "precision": 0.9583,
+    "recall": 1.0,
+    "f1": 0.9787,
+    "support": 23.0,
+    "fn_rate": 0.0,
+    "fp_rate": 0.0064
+  },
+  "surveillance": {
+    "precision": 0.9545,
+    "recall": 0.9545,
+    "f1": 0.9545,
+    "support": 22.0,
+    "fn_rate": 0.0455,
+    "fp_rate": 0.0063
   },
   "criminal_misuse": {
-    "precision": 0.9783,
+    "precision": 0.9583,
     "recall": 1.0,
-    "f1": 0.989,
-    "support": 45.0,
+    "f1": 0.9787,
+    "support": 23.0,
     "fn_rate": 0.0,
-    "fp_rate": 0.0032
+    "fp_rate": 0.0064
   },
   "compliance_abuse": {
-    "precision": 0.878,
-    "recall": 0.8,
-    "f1": 0.8372,
-    "support": 45.0,
-    "fn_rate": 0.2,
-    "fp_rate": 0.0159
+    "precision": 1.0,
+    "recall": 0.9091,
+    "f1": 0.9524,
+    "support": 22.0,
+    "fn_rate": 0.0909,
+    "fp_rate": 0.0
   },
   "macro_avg": {
-    "f1": 0.9407,
-    "precision": 0.9408,
-    "recall": 0.9417
+    "f1": 0.9774,
+    "precision": 0.9782,
+    "recall": 0.9773
   }
 }
