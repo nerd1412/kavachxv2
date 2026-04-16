@@ -192,9 +192,10 @@ _KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
         re.IGNORECASE | re.DOTALL)),
     # Credit decisioning using protected attributes or credit bureau data beyond licensed purpose
     ("credit_decisioning_violation", re.compile(
-        r"\b(credit\s+(scor\w*|model|decisioning|assessment|eligibility|risk|approv\w*))\b"
-        r".{0,100}"
-        r"\b(religion|caste|gender|health\s+status|disability|ethnicity|community|tribe)\b"
+        # "credit scoring/model" or "credit card approval model" — "card" is optional
+        r"\b(credit\s+(card\s+)?(scor\w*|model|decisioning|assessment|eligibility|risk|approv\w*))\b"
+        r".{0,120}"
+        r"\b(religion|caste|gender|health\s+status|health\s+data|disability|ethnicity|community|tribe)\b"
         r"|\b(cibil|credit\s+bureau|bureau\s+data)\b.{0,80}"
         r"\b(marketing|upsell|cross.?sell|insurance|targeting|advertising"
         r"|without\s+(consent|disclos\w*|inform\w*)|beyond\s+(credit|lending|underwriting))\b",
@@ -206,10 +207,20 @@ _KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"\b(beyond|past|after|longer\s+than|in\s+excess\s+of)\b.{0,60}"
         r"\b(regulatory|required|permitted|stated|agreed|mandated|stipulated|rbi|sebi|irdai|pmla|dpdp)"
         r"\s*(period|duration|limit|requirement|retention|timeline|year|month)\b"
+        # Forward order: "keep ... after account deletion"
         r"|\b(retain|store|keep)\b.{0,50}"
         r"\bafter\s+(account\s+(closure|clos\w*|deleted?|cancel\w*)"
         r"|(contract|agreement)\s+(ended?|expir\w*|terminat\w*)"
-        r"|(data\s+)?deletion\s+request|right\s+to\s+erasure)\b",
+        r"|(data\s+)?deletion\s+request|right\s+to\s+erasure)\b"
+        # Reverse order: "after [users delete / account deletion], keep [copy/data]"
+        r"|\bafter\s+.{0,60}\b(delet\w*|erase|erasure|remov\w*|close\s+account|account\s+clos\w*)\b"
+        r".{0,80}\b(keep|retain|store|archive|maintain|preserv\w*)\b.{0,50}"
+        r"\b(copy|data|record\w*|pii|information|shadow|ghost|backup)\b"
+        # Shadow / ghost copy / hidden archive patterns
+        r"|\b(shadow\s+(copy|table|database|schema|archive|partition|store)"
+        r"|ghost\s+(folder|copy|table|schema|record)"
+        r"|hidden\s+(archive|copy|database|partition|store|table)"
+        r"|silent\s+(archive|copy|backup|retention))\b",
         re.IGNORECASE | re.DOTALL,
     )),
     # Sharing customer data with third parties without proper DPA or consent/notice
@@ -249,8 +260,11 @@ _KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
 _CONSENT_QUALIFIERS = re.compile(
     r"\b("
     # Temporal consent gates — "only after X"
-    r"only\s+after\s+(inform|notify|obtain|receiv|get|updat)"
-    r"|after\s+(obtain|inform|notify|receiv|get).{0,30}\bconsent\b"
+    # NOTE: \w* after each stem is required so inflected forms ("informing",
+    # "obtaining", "updating") also match — without it the outer )\b fails on
+    # mid-word positions (e.g. "inform" inside "informing" is not a word boundary).
+    r"only\s+after\s+(inform\w*|notify\w*|obtain\w*|receiv\w*|get|updat\w*)"
+    r"|after\s+(obtain\w*|inform\w*|notify\w*|receiv\w*|get).{0,30}\bconsent\b"
     r"|after\s+updat.{0,20}\bprivacy\s+polic"
     r"|following\s+(receipt|obtaining|confirmation)\s+of\s+consent"
     r"|pending\s+consent"
@@ -313,7 +327,47 @@ _CONSENT_QUALIFIERS = re.compile(
     r"|auto.?delete\b.{0,40}(regulatory|required|rbi|sebi|irdai|mandated)\s*(period|limit)"
     # Statutory compliance framing
     r"|as\s+required\s+(by|under)\s+(rbi|sebi|irdai|pmla|fatf|dpdp|the\s+act)"
-    r"|complies?\s+with\s+(rbi|sebi|irdai|pmla|fatf|dpdp)\s+(guidelines?|regulation|requirement)"
+    # "complies with RBI guidelines" — also handles "complies with RBI and DPDP guidelines"
+    # (conjunction between authorities is allowed, guidelines suffix is optional)
+    r"|complies?\s+with\s+(rbi|sebi|irdai|pmla|fatf|dpdp)"
+    r"(\s+(and|or)\s+(rbi|sebi|irdai|pmla|fatf|dpdp|the\s+act))?"
+    r"(\s+(guidelines?|regulation\w*|requirement\w*|standard\w*))?"
+    # Explicit compliant model phrasing — "does not use religion/caste/gender"
+    r"|does\s+not\s+use\s+.{0,80}\b(protected\s+attributes?|religion|caste|gender|sensitive\s+data)\b"
+    r"|do\s+not\s+use\s+.{0,80}\b(protected\s+attributes?|religion|caste|gender|sensitive\s+data)\b"
+    r"|never\s+uses?\s+.{0,60}\b(protected\s+attributes?|religion|caste|gender)\b"
+    r"|no\s+protected\s+attributes?\s+(are\s+)?(used|included|applied|in\s+(the\s+)?model)\b"
+    r"|explicitly\s+exclud\w+\s+.{0,60}\b(protected|sensitive)\s+attributes?\b"
+    r"|all\s+(scoring\s+)?factors?\s+(are\s+)?disclosed\s+to\s+(applicants?|borrowers?|customers?)\b"
+    r"|with\s+(full|complete|explicit)\s+applicant\s+(disclosure|notice|transparency)\b"
+    # "obtain fresh/new/explicit consent" — consent-gate even without preceding "after"
+    r"|obtain\w*\s+.{0,20}\b(fresh|new|explicit|written|informed|re.?)\s*consent\b"
+    r"|re.?obtain\w*\s+.{0,20}\bconsent\b"
+    # Safeguarded internal access — explicit controls stated (PII masked + audit)
+    r"|pii\s+(is\s+)?(masked|hidden|anonymis\w*|redacted).{0,80}\b(audit\s+log\w*|access\s+log\w*)\b"
+    r"|pii\s+(masked|hidden|redacted)\s+and\s+(every|all|full)\s+access\s+(is\s+)?(audit\s+)?log\w*\b"
+    r"|with\s+(pii\s+(masking|masked)|all\s+pii\s+(fields?\s+)?(masked|hidden)).{0,80}\baudit\s+log\w*\b"
+    # ── DPDP §7 exemptions — processing without consent is permitted ──────────
+    # §7(f): Medical emergency — unconscious/unresponsive patient, life-threatening
+    r"|(?:unconscious|unresponsive|life.?threaten\w*|emergency\s+transfusion"
+    r"|critical\s+(?:condition|patient)|emergency\s+(?:surgery|treatment|care))"
+    r".{0,150}(?:medical\s+record\w*|blood\s+group|health\s+record\w*|patient\s+(?:data|record\w*|history))"
+    r"|(?:medical\s+record\w*|blood\s+group|health\s+record\w*|patient\s+(?:data|record\w*|history))"
+    r".{0,150}(?:unconscious|unresponsive|life.?threaten\w*|emergency\s+(?:transfusion|surgery|treatment|care))"
+    r"|for\s+(?:an?\s+)?emergency\s+(?:transfusion|surgery|treatment|care)"
+    # §7(e): State / disaster management — flood, earthquake, rescue, sovereign function
+    r"|(?:flood|earthquake|cyclone|disaster|natural\s+calamity|rescue\s+operat\w*"
+    r"|government\s+rescue|state\s+(?:relief|emergency|disaster))"
+    r".{0,150}(?:address\w*|locat\w*|contact\s+(?:detail\w*|information)|resident\w*)"
+    r"|(?:address\w*|locat\w*|resident\w*).{0,150}"
+    r"(?:flood|earthquake|cyclone|disaster|rescue\s+operat\w*|government\s+rescue)"
+    r"|coordinate\s+.{0,60}(?:rescue|relief|evacuation|government\s+(?:help|aid|response))"
+    # §7(i): Employment / liability — trade secret investigation, corporate misconduct
+    r"|(?:investigat\w+|review\w*).{0,120}"
+    r"(?:trade\s+secret\w*|corporate\s+(?:espionage|misconduct)|ip\s+(?:theft|leak)"
+    r"|leak.{0,20}(?:compan|competitor|confidential)|reported\s+(?:misconduct|breach|leak))"
+    r"|(?:trade\s+secret\w*|corporate\s+espionage|ip\s+theft|reported\s+leak).{0,120}"
+    r"(?:investigat\w+|review\w*|internal\s+(?:audit|inquiry|investigation))"
     r")\b",
     re.IGNORECASE | re.DOTALL,
 )
@@ -370,6 +424,18 @@ _NUANCED_KEYWORD_PATTERNS: list[tuple[str, re.Pattern]] = [
         r"\b(beyond|outside|other\s+than|secondary|additional|unrelated|new)\b.{0,30}"
         r"\b(purpose|use\s+case|intent|consent|originally\s+collected)\b",
         re.IGNORECASE | re.DOTALL)),
+    # "Can we [continue X] even after [opt-out / deletion / withdrawal]" —
+    # or "Can [data] be [shared/used] without informing users" —
+    # explicit bypass of a data-subject right expressed as a business question.
+    ("right_bypass_query", re.compile(
+        r"\bcan\s+we\b.{0,80}"
+        r"\b(even\s+after\s+(they\s+)?(opt.?out|withdraw|revoke|delete|request\s+deletion)"
+        r"|after\s+(users?|customers?|they)\s+(opt.?out|withdraw|delete|revoke)"
+        r"|without\s+(inform\w*|notify\w*|notic\w*|disclos\w*|consent\w*))\b"
+        # "can [customer/user/personal] data be [shared/sold/used] without informing"
+        r"|\bcan\s+.{0,30}\bdata\b.{0,50}"
+        r"\bwithout\s+(inform\w*|notify\w*|notic\w*|disclos\w*|tell\w*|consent\w*)\b",
+        re.IGNORECASE | re.DOTALL)),
 ]
 
 
@@ -390,6 +456,11 @@ _REGULATORY_QUERY_PATTERN = re.compile(
     r"|can\s+(health|personal|financial|sensitive|employee|kyc|credit)\s+(data|information)\s+be\b"
     r"|what\s+(retention\s+period|is\s+the\s+(correct|proper|required|regulatory))\b"
     r"|what\s+(are\s+the|is\s+the)\s+(rbi|sebi|irdai|pmla|dpdp|fatf).{0,30}(guidelines?|rules?|requirement)\b"
+    # Educational understanding queries — "Can you help me understand X?" is a
+    # learning intent when NOT followed by "how to bypass/circumvent/ignore".
+    # Negative lookahead excludes "help me understand how to [violate/bypass]".
+    r"|can\s+you\s+help\s+me\s+understand(?!\s+how\s+to\s+(?:bypass|circumvent|ignor|violat|avoid|evad))\b"
+    r"|help\s+me\s+understand\s+(credit\s+scor\w*|what\s+is|the\s+(meaning|definition)|pii|dpdp|privacy\s+law)\b"
     r")",
     re.IGNORECASE,
 )
@@ -398,8 +469,10 @@ _REGULATORY_QUERY_PATTERN = re.compile(
 # "without informing / notifying / disclosing / telling users" makes the
 # query an operational test of a violation, not a governance knowledge query.
 _EXPLICIT_VIOLATION_QUERY = re.compile(
-    r"\bwithout\s+(inform\w*|notify\w*|notic\w*|disclos\w*|tell\w*)\b",
-    re.IGNORECASE,
+    r"\bwithout\s+(inform\w*|notify\w*|notic\w*|disclos\w*|tell\w*)\b"
+    r"|\b(bypass|circumvent|ignor\w+|violat\w+|evad\w+)\b.{0,40}"
+    r"\b(consent|opt.?out|privacy\s+(?:law|policy|requirement)|data\s+protection|compliance\s+requirement)\b",
+    re.IGNORECASE | re.DOTALL,
 )
 
 # Analytical policy questions: "How do companies typically X?", "Can I know X from Y?"
@@ -425,7 +498,24 @@ _SAFE_PROFESSIONAL_PATTERN = re.compile(
     r"|data\s+retention\s+(policy|schedule|framework|rule)"
     r"|kyc\s+(data\s+)?(handling|process|framework|policy|compliance)"
     r"|third.?party\s+(data\s+)?(sharing|transfer)\s+(agreement|framework|policy)"
-    r"|data\s+processing\s+agreement|dpa\s+(template|framework|policy))\b",
+    r"|data\s+processing\s+agreement|dpa\s+(template|framework|policy))\b"
+    # Audit/security-awareness framing — describing patterns to DETECT/IDENTIFY them.
+    # Key signals: (describe|explain) + (identify|detect) + (during audit/training)
+    # Uses audit\w* so "audits", "auditing", "auditor" all match.
+    r"|\b(?:describ\w*|explain\w*|list|outline)\b.{0,120}"
+    r"\b(?:identify|detect|recogni[sz]e|spot|find|flag)\b.{0,80}"
+    r"\b(?:during\s+(?:a\s+)?(?:compliance\s+)?audit\w*"
+    r"|for\s+(?:a\s+)?(?:compliance\s+)?(?:audit\w*|training|review|legal\s+brief|dpo\s+report|checklist)"
+    r"|so\s+(?:our|the)\s+(?:team|staff|auditors?|dpo)\s+(?:can\s+)?(?:identify|detect|recogni[sz]e|spot|find|flag))\b"
+    # Checklist / compliance review framing
+    r"|\b(?:compliance\s+(?:audit\s+)?(?:checklist|report|framework|review))\b"
+    r".{0,80}\b(?:identify|detect|look\s+for|flag)\b"
+    # "How should regulators / compliance teams detect/identify X?" — regulatory
+    # awareness framing asking HOW to catch violations, not how to commit them.
+    # Also catches the tail of combined questions like "...and how should regulators detect it?"
+    r"|\bhow\s+(?:should|do|can|would)\s+"
+    r"(?:regulators?|compliance\s+(?:teams?|officers?|authorities?)|enforcement|auditors?|dpo|supervisors?)\s+"
+    r"(?:identify|detect|catch|recogni[sz]e|spot|find|flag|uncover)\b",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -477,6 +567,28 @@ def regex_filter(text: str) -> RegexResult:
             result.triggered = True
             result.is_illegal = True
             result.matched_patterns.append(name)
+
+    # ── Credit decisioning negation guard ───────────────────────────────────
+    # credit_decisioning_violation fires on "credit model ... religion" even
+    # when the text says "does NOT use religion". Detect negation context and
+    # downgrade from is_illegal (BLOCK) to has_compliance_signal (REVIEW).
+    if "credit_decisioning_violation" in result.matched_patterns:
+        _CDV_NEGATION = re.compile(
+            r"\b(does\s+not\s+use|do\s+not\s+use|never\s+uses?|not\s+us\w+\s+.{0,30}"
+            r"(religion|caste|gender|protected)|explicitly\s+exclud\w*"
+            r"|no\s+protected\s+attributes?|not\s+included)\b",
+            re.IGNORECASE | re.DOTALL,
+        )
+        if _CDV_NEGATION.search(text):
+            result.matched_patterns.remove("credit_decisioning_violation")
+            # Only keep is_illegal if other illegal patterns remain
+            result.is_illegal = any(
+                p not in ("credit_decisioning_violation",)
+                and any(p == n for n, _ in _KEYWORD_PATTERNS)
+                for p in result.matched_patterns
+            )
+            # Treat as borderline compliance signal rather than hard violation
+            result.has_compliance_signal = True
 
     # Nuanced patterns — skip if sentence expresses genuinely compliant intent.
     # Exception: if a qualifier appears as a concession prefix

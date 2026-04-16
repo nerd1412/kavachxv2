@@ -1,0 +1,71 @@
+{
+  "safe": {
+    "precision": 0.8837,
+    "recall": 0.8444,
+    "f1": 0.8636,
+    "support": 45.0,
+    "fn_rate": 0.1556,
+    "fp_rate": 0.0159
+  },
+  "personal_data": {
+    "precision": 0.9348,
+    "recall": 0.9556,
+    "f1": 0.9451,
+    "support": 45.0,
+    "fn_rate": 0.0444,
+    "fp_rate": 0.0095
+  },
+  "financial_data": {
+    "precision": 0.9574,
+    "recall": 1.0,
+    "f1": 0.9783,
+    "support": 45.0,
+    "fn_rate": 0.0,
+    "fp_rate": 0.0063
+  },
+  "health_data": {
+    "precision": 0.9565,
+    "recall": 0.9778,
+    "f1": 0.967,
+    "support": 45.0,
+    "fn_rate": 0.0222,
+    "fp_rate": 0.0063
+  },
+  "profiling": {
+    "precision": 1.0,
+    "recall": 0.9556,
+    "f1": 0.9773,
+    "support": 45.0,
+    "fn_rate": 0.0444,
+    "fp_rate": 0.0
+  },
+  "surveillance": {
+    "precision": 0.9375,
+    "recall": 1.0,
+    "f1": 0.9677,
+    "support": 45.0,
+    "fn_rate": 0.0,
+    "fp_rate": 0.0095
+  },
+  "criminal_misuse": {
+    "precision": 0.9783,
+    "recall": 1.0,
+    "f1": 0.989,
+    "support": 45.0,
+    "fn_rate": 0.0,
+    "fp_rate": 0.0032
+  },
+  "compliance_abuse": {
+    "precision": 0.878,
+    "recall": 0.8,
+    "f1": 0.8372,
+    "support": 45.0,
+    "fn_rate": 0.2,
+    "fp_rate": 0.0159
+  },
+  "macro_avg": {
+    "f1": 0.9407,
+    "precision": 0.9408,
+    "recall": 0.9417
+  }
+}

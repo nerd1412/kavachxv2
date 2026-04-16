@@ -376,6 +376,36 @@ def pipeline(text: str) -> GeneralSafetyResult:
     # ── Final verdict: take the highest severity ──────────────────────────────
     _priority = {Verdict.ALLOW: 0, Verdict.REVIEW: 1, Verdict.BLOCK: 2}
     final = max(l1_verdict, l2_verdict, key=lambda v: _priority[v])
+
+    # ── Definitional query guard ──────────────────────────────────────────────
+    # "What is X?" / "Define X" queries for economic/legal terms are pure
+    # educational lookups. Cap them for financial_crime and misinformation only
+    # — not for violence/hate_speech/self_harm where the classifier is reliable.
+    # Guard only fires when L2 similarity is low (not a near-match to unsafe prompt).
+    _DEFINITIONAL_QUERY_RE = re.compile(
+        r"^(?:what\s+(?:is|are|does)\s+"
+        r"|what\s+is\s+the\s+(?:meaning|definition)\s+of\s+"
+        r"|define\s+"
+        r"|meaning\s+of\s+"
+        r"|explain\s+(?:the\s+)?(?:term|word|meaning|concept)\s+"
+        r"|what\s+does\s+\w[\w\s]{1,50}\s+mean"
+        r")",
+        re.IGNORECASE,
+    )
+    _DEFINITIONAL_SAFE_CLASSES = {"financial_crime", "misinformation"}
+    words = text_norm.split()
+    if (
+        _DEFINITIONAL_QUERY_RE.match(text_norm)
+        and top_label in _DEFINITIONAL_SAFE_CLASSES
+        and max_sim < L2_BLOCK_THRESHOLD  # not near-identical to a known unsafe prompt
+    ):
+        if len(words) <= 10 and final != Verdict.ALLOW:
+            final = Verdict.ALLOW
+            result.reasons.append("definitional_query:short_capped_at_allow")
+        elif final == Verdict.BLOCK:
+            final = Verdict.REVIEW
+            result.reasons.append("definitional_query:block_capped_at_review")
+
     result.verdict = final
 
     # ── Risk score: probability of the top harmful class (or similarity floor) ─

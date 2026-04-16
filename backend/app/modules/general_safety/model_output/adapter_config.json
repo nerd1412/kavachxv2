@@ -19,6 +19,8 @@
   "megatron_config": null,
   "megatron_core": "megatron.core",
   "modules_to_save": [
+    "pre_classifier",
+    "classifier",
     "classifier",
     "score"
   ],

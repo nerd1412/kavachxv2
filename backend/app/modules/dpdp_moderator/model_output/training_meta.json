@@ -1,0 +1,13 @@
+{
+  "trained_at": "2026-04-16T11:39:12.868380Z",
+  "epochs": 4,
+  "best_val_accuracy": 0.9278,
+  "test_accuracy": 0.9417,
+  "samples_per_class": 300,
+  "feedback_samples": 0,
+  "total_train_samples": 1680,
+  "use_focal_loss": true,
+  "use_class_weighted": true,
+  "resumed_from": null,
+  "macro_f1": 0.9407
+}

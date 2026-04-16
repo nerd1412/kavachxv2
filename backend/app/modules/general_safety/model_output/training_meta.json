@@ -1,18 +1,13 @@
 {
+  "trained_at": "2026-04-16T06:27:20.754365Z",
   "epochs": 4,
-  "batch_size": 8,
-  "lr": 0.0003,
-  "val_split": 0.15,
-  "seed": 42,
-  "num_labels": 7,
-  "labels": [
-    "safe",
-    "self_harm",
-    "violence",
-    "hate_speech",
-    "prompt_injection",
-    "financial_crime",
-    "eu_ai_act_violation"
-  ],
-  "dataset_size": 1200
+  "best_val_accuracy": 0.9889,
+  "test_accuracy": 1.0,
+  "augmentation_factor": 3,
+  "feedback_samples": 0,
+  "total_train_samples": 840,
+  "use_focal_loss": true,
+  "use_class_weighted": true,
+  "resumed_from": null,
+  "macro_f1": 1.0
 }
